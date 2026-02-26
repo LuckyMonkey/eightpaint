@@ -278,7 +278,29 @@
       savePaintedCellsNow();
     }
 
+    function isHardReload() {
+      const navEntry = performance.getEntriesByType('navigation')[0];
+      return Boolean(navEntry && navEntry.type === 'reload');
+    }
+
+    function clearStoredState() {
+      paintedCells.clear();
+      cameraX = 0;
+      cameraY = 0;
+      panTargetCameraX = 0;
+      panTargetCameraY = 0;
+      try {
+        localStorage.removeItem(storageKey);
+      } catch {
+      }
+    }
+
     function loadStateFromQueryOrStorage() {
+      if (isHardReload()) {
+        clearStoredState();
+        return;
+      }
+
       try {
         const params = new URLSearchParams(window.location.search);
         const encodedState = params.get(stateQueryKey);
@@ -305,16 +327,8 @@
         }
       } catch {
       }
-
-      try {
-        const raw = localStorage.getItem(storageKey);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        for (const [key, color] of Object.entries(parsed)) {
-          if (typeof color === 'string' && color !== defaultColor) paintedCells.set(key, color);
-        }
-      } catch {
-      }
+      // If the URL has no state param, intentionally start fresh.
+      clearStoredState();
     }
 
     function hexCenterX(row, col) {
