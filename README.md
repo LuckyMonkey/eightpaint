@@ -1,5 +1,6 @@
-# EightPaint
+# 🎨 EightPaint 
 
+Click on screenshot below to play!
 [![EightPaint Screenshot](./preview.png)](https://luckymonkey.github.io/eightpaint/index.html)
 
 EightPaint is a tiny hex-grid painting toy written in plain HTML and JavaScript.
