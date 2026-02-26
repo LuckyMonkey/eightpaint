@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Hexagonal Pixel Drawing Demo</title>
+  <style>
+    /* Remove margins and scrollbars so the hex canvas fills the page */
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      height: 100%;
+      background: #111;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #111;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    This demo draws a repeating grid of pointy‑topped hexagons across the entire
+    page. When you click a hexagon the clicked cell and its six immediate
+    neighbours are recoloured with the same random hue. The layout follows
+    the odd‑r offset coordinate system described by Red Blob Games. In this
+    system each row of hexagons is shifted horizontally by half a hex when
+    the row index is odd. The horizontal and vertical spacing of the centres
+    comes from the formulas for a pointy‑topped grid (horiz = √3 × size,
+    vert = 3/2 × size)【730040088138928†L71-L77】. Neighbour relationships
+    depend on the row parity; the offsets for even and odd rows are taken
+    from the table on Red Blob Games【730040088138928†L458-L470】.
+  -->
+  <canvas id="hexCanvas"></canvas>
+  <script>
+    // Get the canvas and its drawing context
+    const canvas = document.getElementById('hexCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Size of each hexagon measured from centre to any corner
+    const hexSize = 25;
+    // Precompute spacing constants using pointy‑topped formulas: horizontal
+    // spacing (distance between adjacent centres) and vertical spacing
+    const horiz = Math.sqrt(3) * hexSize;   // width of each column【730040088138928†L71-L77】
+    const vert  = 1.5 * hexSize;            // vertical distance between rows【730040088138928†L71-L77】
+
+    // The grid will be stored in a dictionary keyed by "row,col" strings.
+    // Each entry stores its row, col, centre coordinates (x,y) and a colour.
+    let grid;
+
+    /**
+     * Build the grid of hexagons covering the visible canvas.  We use the
+     * odd‑r offset coordinate system, which offsets every odd row by half a
+     * hex width. We iterate over a rectangle of potential rows/columns that
+     * completely covers the viewport and create hex cells wherever the centre
+     * falls within the viewport plus a margin.
+     */
+    function buildGrid() {
+      grid = {};
+      // Determine roughly how many rows and columns we need to cover the
+      // current canvas size. We add a couple of extra rows/columns around
+      // the edges so that partially visible hexes are drawn properly.
+      const rowCount = Math.ceil(canvas.height / vert) + 2;
+      const colCount = Math.ceil(canvas.width  / horiz) + 2;
+      for (let row = -1; row < rowCount; row++) {
+        for (let col = -1; col < colCount; col++) {
+          // In odd‑r offset coordinates, odd rows are shifted right by half
+          // a hex width. Compute the centre x coordinate accordingly.
+          const x = col * horiz + ((row & 1) ? horiz / 2 : 0);
+          const y = row * vert;
+          // Only store cells whose centre lies just outside the viewport
+          if (x > -hexSize && x < canvas.width + hexSize &&
+              y > -hexSize && y < canvas.height + hexSize) {
+            const key = `${row},${col}`;
+            grid[key] = { row, col, x, y, color: '#222' };
+          }
+        }
+      }
+    }
+
+    /**
+     * Draw a single pointy‑topped hexagon at the given centre coordinates.
+     * Colours and outlines are drawn to distinguish cells.
+     */
+    function drawHex(x, y, color) {
+      ctx.beginPath();
+      for (let i = 0; i < 6; i++) {
+        // Angle offset of 30° gives pointy tops【730040088138928†L89-L94】
+        const angle = (Math.PI / 180) * (60 * i + 30);
+        const vx = x + hexSize * Math.cos(angle);
+        const vy = y + hexSize * Math.sin(angle);
+        if (i === 0) {
+          ctx.moveTo(vx, vy);
+        } else {
+          ctx.lineTo(vx, vy);
+        }
+      }
+      ctx.closePath();
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = '#444';
+      ctx.stroke();
+    }
+
+    /**
+     * Render the entire grid. Clear the canvas and draw each stored cell.
+     */
+    function drawGrid() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const key in grid) {
+        const cell = grid[key];
+        drawHex(cell.x, cell.y, cell.color);
+      }
+    }
+
+    // Neighbour offset tables for even and odd rows using the odd‑r layout.
+    // These come directly from the Red Blob Games article【730040088138928†L458-L470】.
+    const evenRowNeighbors = [
+      [+1,  0], [ 0, -1], [-1, -1],
+      [-1,  0], [-1, +1], [ 0, +1],
+    ];
+    const oddRowNeighbors  = [
+      [+1,  0], [+1, -1], [ 0, -1],
+      [-1,  0], [ 0, +1], [+1, +1],
+    ];
+
+    /**
+     * Handle a click event: determine which hexagon was clicked and recolour
+     * it along with its neighbours. We invert the odd‑r coordinate formulas:
+     * row = floor(mouseY / vert), col = floor((mouseX - shift) / horiz).
+     */
+    function handleClick(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = evt.clientX - rect.left;
+      const mouseY = evt.clientY - rect.top;
+      // Determine which row the click falls into
+      const row = Math.floor(mouseY / vert);
+      // Determine the horizontal shift for odd rows
+      const parity = row & 1;
+      const col = Math.floor((mouseX - (parity ? horiz / 2 : 0)) / horiz);
+      const key = `${row},${col}`;
+      if (grid[key]) {
+        // Pick a random pastel colour to apply to the clicked cell and its neighbours
+        const hue = Math.floor(Math.random() * 360);
+        const color = `hsl(${hue}, 70%, 50%)`;
+        grid[key].color = color;
+        // Choose neighbour offsets based on row parity
+        const neighborOffsets = (parity ? oddRowNeighbors : evenRowNeighbors);
+        for (const [dx, dy] of neighborOffsets) {
+          const nRow = row + dy;
+          const nCol = col + dx;
+          const nKey = `${nRow},${nCol}`;
+          if (grid[nKey]) {
+            grid[nKey].color = color;
+          }
+        }
+        drawGrid();
+      }
+    }
+
+    // Resize the canvas when the window size changes and rebuild the grid.
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      buildGrid();
+      drawGrid();
+    }
+
+    // Listen for clicks and window resizes
+    canvas.addEventListener('click', handleClick);
+    window.addEventListener('resize', resizeCanvas);
+
+    // Initialise the canvas when the page loads
+    resizeCanvas();
+  </script>
+</body>
+</html>
