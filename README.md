@@ -1,6 +1,6 @@
 # EightPaint
 
-![EightPaint Screenshot](./image_2026-02-26_05-02-30.png)
+![EightPaint Screenshot](./preview.png)
 
 EightPaint is a tiny hex-grid painting toy written in plain HTML and JavaScript.
 
