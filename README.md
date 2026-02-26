@@ -1,6 +1,6 @@
 # EightPaint
 
-[![EightPaint Screenshot](./preview.png)](https://luckymonkey.github.io/eightpaint/)
+[![EightPaint Screenshot](./preview.png)](https://luckymonkey.github.io/eightpaint/index.html)
 
 EightPaint is a tiny hex-grid painting toy written in plain HTML and JavaScript.
 
@@ -17,9 +17,8 @@ Just a canvas and some hex math.
 ## Live preview (GitHub Pages)
 
 1. Push this repo to GitHub.
-2. In your repository, open **Settings → Pages** and set **Source = GitHub Actions**.
-3. Update the screenshot link above from `YOUR_GITHUB_USERNAME` to your real username/org.
-4. After the deploy workflow runs, click the screenshot to open and play the live app.
+2. In your repository, open **Settings -> Pages** and set **Source = GitHub Actions**.
+3. After the deploy workflow runs, click the screenshot to open and play the live app.
 
 ---
 
