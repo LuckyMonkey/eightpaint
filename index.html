@@ -16,7 +16,7 @@
       width: 100%;
       height: 100%;
       background: #111;
-      cursor: crosshair;
+      cursor: pointer;
     }
     canvas.space-mode {
       cursor: grab;
@@ -29,18 +29,21 @@
       left: 0;
       top: 0;
       pointer-events: none;
-      font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-      font-size: 14px;
+      font-family: "Trebuchet MS", "Avenir Next", "Segoe UI", sans-serif;
+      font-size: 15px;
       font-weight: 700;
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      text-transform: none;
       color: #fff;
-      text-shadow: 0 0 10px rgba(0, 0, 0, 0.55);
+      text-shadow: 0 0 12px rgba(0, 0, 0, 0.7);
       transform: translate(14px, -14px);
       opacity: 0;
-      transition: opacity 220ms ease-out;
+      transition: opacity 320ms ease-out;
       mix-blend-mode: screen;
       white-space: nowrap;
+      padding: 4px 8px;
+      border-radius: 10px;
+      background: rgba(0, 0, 0, 0.22);
     }
   </style>
 </head>
@@ -77,6 +80,10 @@
     };
 
     const schemeOrder = ['swamp', 'lava', 'ice', 'pastel', 'mono', 'rainbow', 'candy', 'forest', 'ocean'];
+    const schemeLabelColors = {
+      mono: '#f3f3f3',
+      ocean: '#8fe9ff',
+    };
 
     const evenRowNeighbors = [
       [+1,  0], [ 0, -1], [-1, -1],
@@ -114,7 +121,6 @@
     let pointerX = 0;
     let pointerY = 0;
     let indicatorFadeTimerId = null;
-    let indicatorBlinkTimerId = null;
 
     let saveTimerId = null;
 
@@ -168,31 +174,18 @@
     function showSchemeIndicator() {
       const schemeName = schemeOrder[activeSchemeIndex];
       const swatch = getActivePalette()[0];
-      schemeIndicator.textContent = `${schemeName} ${swatch}`;
-      schemeIndicator.style.color = swatch;
+      const labelColor = schemeLabelColors[schemeName] || swatch;
+      schemeIndicator.textContent = schemeName.toLowerCase();
+      schemeIndicator.style.color = labelColor;
       schemeIndicator.style.opacity = '1';
 
       if (indicatorFadeTimerId) {
         clearTimeout(indicatorFadeTimerId);
       }
 
-      let blinkCount = 0;
-      if (indicatorBlinkTimerId) {
-        clearInterval(indicatorBlinkTimerId);
-      }
-      indicatorBlinkTimerId = window.setInterval(() => {
-        blinkCount += 1;
-        schemeIndicator.style.opacity = (blinkCount % 2 === 0) ? '1' : '0.2';
-        if (blinkCount >= 5) {
-          clearInterval(indicatorBlinkTimerId);
-          indicatorBlinkTimerId = null;
-          schemeIndicator.style.opacity = '1';
-        }
-      }, 90);
-
       indicatorFadeTimerId = window.setTimeout(() => {
         schemeIndicator.style.opacity = '0';
-      }, 650);
+      }, 1000);
     }
 
     function cycleScheme(direction) {
@@ -515,12 +508,6 @@
       updateSchemeIndicatorPosition(pointerX, pointerY);
       const direction = (evt.deltaY || evt.deltaX) >= 0 ? 1 : -1;
       cycleScheme(direction);
-      if (indicatorFadeTimerId) {
-        clearTimeout(indicatorFadeTimerId);
-      }
-      indicatorFadeTimerId = window.setTimeout(() => {
-        schemeIndicator.style.opacity = '0';
-      }, 420);
     }, { passive: false });
 
     canvas.addEventListener('contextmenu', (evt) => {
