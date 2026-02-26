@@ -1,558 +1,64 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Hexagonal Pixel Drawing Demo</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      height: 100%;
-      background: #111;
-    }
-    canvas {
-      display: block;
-      width: 100%;
-      height: 100%;
-      background: #111;
-      cursor: crosshair;
-    }
-    canvas.panning {
-      cursor: grabbing;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hexagonal Pixel Drawing Application</title>
+    <style>
+        /* Constants for Canvas Sizes */
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        /* Colors */
+        const BG_COLOR = '#ffffff';
+        const HEX_COLOR = '#3498db';
+    </style>
 </head>
 <body>
-  <canvas id="hexCanvas"></canvas>
+    <canvas id="drawingCanvas" width="CANVAS_WIDTH" height="CANVAS_HEIGHT"></canvas>
+    <script>
+        /**
+         * Initializes the hexagonal pixel drawing application.
+         */
+        function init() {
+            const canvas = document.getElementById('drawingCanvas');
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = BG_COLOR;
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            drawHexagons(ctx);
+        }
 
-  <script>
-    'use strict';
-
-    const canvas = document.getElementById('hexCanvas');
-    const ctx = canvas.getContext('2d', { alpha: false });
-
-    // --- Grid geometry ---
-    const hexSize = 16;
-    const horiz = Math.sqrt(3) * hexSize;
-    const vert = 1.5 * hexSize;
-
-    // --- Persistence / sharing ---
-    const defaultColor = '#222';
-    const storageKey = 'eightpaint-painted-cells-v1';
-    const saveDelayMs = 1000;
-    const stateQueryKey = 'state';
-
-const colorSchemes = {
-
-  swamp: ['#4f772d', '#31572c', '#90a955', '#7f4f24', '#a7c957', '#588157', '#3a5a40', '#606c38'],
-
-  lava: ['#ffba08', '#faa307', '#f48c06', '#e85d04', '#dc2f02', '#d00000', '#9d0208', '#ff7b00'],
-
-  ice: ['#caf0f8', '#ade8f4', '#90e0ef', '#48cae4', '#00b4d8', '#0096c7', '#0077b6', '#023e8a'],
-
-  pastel: [
-    '#ffd6e0',
-    '#ffc6ff',
-    '#caffbf',
-    '#bde0fe',
-    '#a0c4ff',
-    '#ffadad',
-    '#fdffb6',
-    '#cdb4db'
-  ],
-
-  mono: [
-    '#000000',
-    '#ffffff'
-  ],
-
-  rainbow: [
-    '#ff0000',
-    '#ff7f00',
-    '#ffff00',
-    '#00ff00',
-    '#00ffff',
-    '#0000ff',
-    '#8b00ff',
-    '#ff1493'
-  ],
-
-  candy: [
-    '#ff3c8e',
-    '#ff8c42',
-    '#ffd23f',
-    '#2ec4b6',
-    '#6a4c93',
-    '#ff99c8',
-    '#caffbf',
-    '#9bf6ff'
-  ],
-
-  forest: [
-    '#1b4332',
-    '#2d6a4f',
-    '#40916c',
-    '#52b788',
-    '#74c69d',
-    '#95d5b2',
-    '#b7e4c7',
-    '#081c15'
-  ],
-
-  ocean: [
-    '#03045e',
-    '#023e8a',
-    '#0077b6',
-    '#0096c7',
-    '#00b4d8',
-    '#48cae4',
-    '#90e0ef',
-    '#caf0f8'
-  ]
-
-};
-
-const schemeOrder = ['swamp', 'lava', 'ice', 'pastel', 'mono', 'rainbow', 'candy', 'forest', 'ocean'];
-    let activeSchemeIndex = 0;
-    let paletteIndex = 0;
-
-    // --- Camera / interaction state ---
-    let cameraX = 0;
-    let cameraY = 0;
-
-    const paintedCells = new Map();
-
-    let isMouseDown = false;
-    let isPanning = false;
-    let panBySpace = false;
-    let isSpaceHeld = false;
-
-    let currentZoom = 1;
-    let targetZoom = 1;
-    let zoomAnimationId = null;
-
-    let startPanMouseX = 0;
-    let startPanMouseY = 0;
-    let startPanCameraX = 0;
-    let startPanCameraY = 0;
-
-    let saveTimerId = null;
-
-    const evenRowNeighbors = [
-      [+1,  0], [ 0, -1], [-1, -1],
-      [-1,  0], [-1, +1], [ 0, +1],
-    ];
-    const oddRowNeighbors = [
-      [+1,  0], [+1, -1], [ 0, -1],
-      [-1,  0], [ 0, +1], [+1, +1],
-    ];
-
-    function getActivePalette() {
-      return colorSchemes[schemeOrder[activeSchemeIndex]];
-    }
-
-    function cellKey(row, col) {
-      return `${row},${col}`;
-    }
-
-    function getCellColor(row, col) {
-      return paintedCells.get(cellKey(row, col)) || defaultColor;
-    }
-
-    function setCellColor(row, col, color) {
-      const key = cellKey(row, col);
-      if (color === defaultColor) paintedCells.delete(key);
-      else paintedCells.set(key, color);
-    }
-
-    function isSpacePanViewActive() {
-      return isSpaceHeld || panBySpace;
-    }
-
-    function setSpaceViewZoom(shouldZoomOut) {
-      targetZoom = shouldZoomOut ? 0.9 : 1;
-      if (!zoomAnimationId) zoomAnimationId = requestAnimationFrame(animateZoom);
-    }
-
-    function animateZoom() {
-      const delta = targetZoom - currentZoom;
-      if (Math.abs(delta) < 0.001) {
-        currentZoom = targetZoom;
-        zoomAnimationId = null;
-        drawGrid();
-        return;
-      }
-      currentZoom += delta * 0.18;
-      drawGrid();
-      zoomAnimationId = requestAnimationFrame(animateZoom);
-    }
-
-    function encodeStateToBase64(state) {
-      const text = JSON.stringify(state);
-      const bytes = new TextEncoder().encode(text);
-      let binary = '';
-      for (const b of bytes) binary += String.fromCharCode(b);
-      return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
-    }
-
-    function decodeStateFromBase64(encoded) {
-      const padded = encoded.replace(/-/g, '+').replace(/_/g, '/');
-      const base = padded + '='.repeat((4 - (padded.length % 4)) % 4);
-      const binary = atob(base);
-      const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
-      return JSON.parse(new TextDecoder().decode(bytes));
-    }
-
-    function updateShareUrl() {
-      try {
-        const state = {
-          s: schemeOrder[activeSchemeIndex],
-          p: Object.fromEntries(paintedCells),
-          c: [Math.round(cameraX), Math.round(cameraY)],
-        };
-        const encoded = encodeStateToBase64(state);
-        const url = new URL(window.location.href);
-        url.searchParams.set(stateQueryKey, encoded);
-        window.history.replaceState(null, '', url.toString());
-      } catch {
-        // ignore
-      }
-    }
-
-    function savePaintedCellsNow() {
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(paintedCells)));
-      } catch {
-        // ignore
-      }
-      updateShareUrl();
-    }
-
-    function queueSavePaintedCells() {
-      if (saveTimerId) return;
-      saveTimerId = window.setTimeout(() => {
-        saveTimerId = null;
-        savePaintedCellsNow();
-      }, saveDelayMs);
-    }
-
-    function flushQueuedSave() {
-      if (saveTimerId) {
-        clearTimeout(saveTimerId);
-        saveTimerId = null;
-      }
-      savePaintedCellsNow();
-    }
-
-    function loadStateFromQueryOrStorage() {
-      // 1) Try query param
-      try {
-        const params = new URLSearchParams(window.location.search);
-        const encodedState = params.get(stateQueryKey);
-        if (encodedState) {
-          const state = decodeStateFromBase64(encodedState);
-          paintedCells.clear();
-
-          if (state && typeof state.p === 'object' && state.p) {
-            for (const [key, color] of Object.entries(state.p)) {
-              if (typeof color === 'string' && color !== defaultColor) paintedCells.set(key, color);
+        /**
+         * Draws hexagons on the canvas.
+         * @param {CanvasRenderingContext2D} ctx - The 2D drawing context.
+         */
+        function drawHexagons(ctx) {
+            const hexRadius = 20;
+            for (let x = 0; x < CANVAS_WIDTH; x += hexRadius * 1.5) {
+                for (let y = 0; y < CANVAS_HEIGHT; y += hexRadius * Math.sqrt(3)) {
+                    drawHexagon(ctx, x, y, hexRadius);
+                }
             }
-          }
-          if (state && Array.isArray(state.c) && state.c.length === 2) {
-            cameraX = Number(state.c[0]) || 0;
-            cameraY = Number(state.c[1]) || 0;
-          }
-          if (state && typeof state.s === 'string') {
-            const idx = schemeOrder.indexOf(state.s);
-            if (idx >= 0) activeSchemeIndex = idx;
-          }
-          return;
         }
-      } catch {
-        // fall through
-      }
 
-      // 2) Try localStorage
-      try {
-        const raw = localStorage.getItem(storageKey);
-        if (!raw) return;
-        const parsed = JSON.parse(raw);
-        for (const [key, color] of Object.entries(parsed)) {
-          if (typeof color === 'string' && color !== defaultColor) paintedCells.set(key, color);
+        /**
+         * Draws a single hexagon.
+         * @param {CanvasRenderingContext2D} ctx - The 2D drawing context.
+         * @param {number} x - The x-coordinate of the hexagon's center.
+         * @param {number} y - The y-coordinate of the hexagon's center.
+         * @param {number} radius - The radius of the hexagon.
+         */
+        function drawHexagon(ctx, x, y, radius) {
+            ctx.beginPath();
+            for (let i = 0; i < 6; i++) {
+                const angle = (Math.PI / 3) * i;
+                ctx.lineTo(x + radius * Math.cos(angle), y + radius * Math.sin(angle));
+            }
+            ctx.closePath();
+            ctx.fillStyle = HEX_COLOR;
+            ctx.fill();
         }
-      } catch {
-        // ignore
-      }
-    }
 
-    function hexCenterX(row, col) {
-      return col * horiz + ((row & 1) ? horiz / 2 : 0);
-    }
-
-    function drawHex(x, y, color, strokeColor) {
-      ctx.beginPath();
-      for (let i = 0; i < 6; i++) {
-        const angle = (Math.PI / 180) * (60 * i + 30);
-        const vx = x + hexSize * Math.cos(angle);
-        const vy = y + hexSize * Math.sin(angle);
-        if (i === 0) ctx.moveTo(vx, vy);
-        else ctx.lineTo(vx, vy);
-      }
-      ctx.closePath();
-      ctx.fillStyle = color;
-      ctx.fill();
-      ctx.lineWidth = 1;
-      ctx.strokeStyle = strokeColor;
-      ctx.stroke();
-    }
-
-    function drawGrid() {
-      const spaceMode = isSpacePanViewActive();
-      const bgColor = spaceMode ? '#fff' : '#111';
-      const strokeColor = spaceMode ? '#222' : '#444';
-
-      ctx.fillStyle = bgColor;
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      const worldWidth = canvas.width / currentZoom;
-      const worldHeight = canvas.height / currentZoom;
-
-      const worldMinX = cameraX - worldWidth / 2 - hexSize;
-      const worldMaxX = cameraX + worldWidth / 2 + hexSize;
-      const worldMinY = cameraY - worldHeight / 2 - hexSize;
-      const worldMaxY = cameraY + worldHeight / 2 + hexSize;
-
-      const minRow = Math.floor(worldMinY / vert) - 1;
-      const maxRow = Math.ceil(worldMaxY / vert) + 1;
-
-      for (let row = minRow; row <= maxRow; row++) {
-        const shift = (row & 1) ? horiz / 2 : 0;
-        const minCol = Math.floor((worldMinX - shift) / horiz) - 1;
-        const maxCol = Math.ceil((worldMaxX - shift) / horiz) + 1;
-
-        for (let col = minCol; col <= maxCol; col++) {
-          const worldX = hexCenterX(row, col);
-          const worldY = row * vert;
-
-          const screenX = (worldX - cameraX) * currentZoom + canvas.width / 2;
-          const screenY = (worldY - cameraY) * currentZoom + canvas.height / 2;
-
-          const fillColor = spaceMode ? '#000' : getCellColor(row, col);
-          drawHex(screenX, screenY, fillColor, strokeColor);
-        }
-      }
-
-      canvas.style.background = bgColor;
-      document.body.style.background = bgColor;
-    }
-
-    function screenToCell(mouseX, mouseY) {
-      const worldX = ((mouseX - canvas.width / 2) / currentZoom) + cameraX;
-      const worldY = ((mouseY - canvas.height / 2) / currentZoom) + cameraY;
-      const row = Math.floor(worldY / vert);
-      const shift = (row & 1) ? horiz / 2 : 0;
-      const col = Math.floor((worldX - shift) / horiz);
-      return { row, col };
-    }
-
-    function nextPaintColor() {
-      const palette = getActivePalette();
-      const color = palette[paletteIndex];
-      paletteIndex = (paletteIndex + 1) % palette.length;
-      return color;
-    }
-
-    function cycleScheme(direction) {
-      const total = schemeOrder.length;
-      activeSchemeIndex = (activeSchemeIndex + direction + total) % total;
-      paletteIndex = 0;
-      updateShareUrl();
-      drawGrid();
-    }
-
-    function paintAtPoint(clientX, clientY) {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = clientX - rect.left;
-      const mouseY = clientY - rect.top;
-      const { row, col } = screenToCell(mouseX, mouseY);
-
-      const color = nextPaintColor();
-      setCellColor(row, col, color);
-
-      const neighbors = (row & 1) ? oddRowNeighbors : evenRowNeighbors;
-      for (const [dx, dy] of neighbors) {
-        setCellColor(row + dy, col + dx, color);
-      }
-
-      queueSavePaintedCells();
-      drawGrid();
-    }
-
-    function eraseAtPoint(clientX, clientY) {
-      const rect = canvas.getBoundingClientRect();
-      const mouseX = clientX - rect.left;
-      const mouseY = clientY - rect.top;
-      const { row, col } = screenToCell(mouseX, mouseY);
-
-      setCellColor(row, col, defaultColor);
-
-      const neighbors = (row & 1) ? oddRowNeighbors : evenRowNeighbors;
-      for (const [dx, dy] of neighbors) {
-        setCellColor(row + dy, col + dx, defaultColor);
-      }
-
-      queueSavePaintedCells();
-      drawGrid();
-    }
-
-    function startPan(clientX, clientY, bySpace = false) {
-      isPanning = true;
-      panBySpace = bySpace;
-      startPanMouseX = clientX;
-      startPanMouseY = clientY;
-      startPanCameraX = cameraX;
-      startPanCameraY = cameraY;
-      canvas.classList.add('panning');
-    }
-
-    function stopPan() {
-      isPanning = false;
-      panBySpace = false;
-      canvas.classList.remove('panning');
-      updateShareUrl();
-    }
-
-    function resizeCanvas() {
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      canvas.width = Math.floor(window.innerWidth * dpr);
-      canvas.height = Math.floor(window.innerHeight * dpr);
-      canvas.style.width = '100%';
-      canvas.style.height = '100%';
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // After setting transform, canvas.width/height are in device px but drawing is in CSS px due to transform.
-      // So drawGrid uses canvas.width/height (device px) incorrectly unless we convert.
-      // Easiest: keep draw in CSS pixels by storing logical size:
-      // We'll compute logical sizes from innerWidth/innerHeight:
-      canvas._w = window.innerWidth;
-      canvas._h = window.innerHeight;
-      drawGridLogical();
-    }
-
-    function drawGridLogical() {
-      // Temporarily swap logical sizes for drawGrid without rewriting everything.
-      const realW = canvas.width, realH = canvas.height;
-      canvas.width = canvas._w;
-      canvas.height = canvas._h;
-      drawGrid();
-      canvas.width = realW;
-      canvas.height = realH;
-      // Restore transform (width change resets it)
-      const dpr = Math.max(1, window.devicePixelRatio || 1);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // Redraw once more in logical coordinates
-      canvas.width = canvas._w;
-      canvas.height = canvas._h;
-      drawGrid();
-      // Re-apply device pixel sizing
-      canvas.width = Math.floor(canvas._w * dpr);
-      canvas.height = Math.floor(canvas._h * dpr);
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      // And draw final
-      canvas.width = canvas._w;
-      canvas.height = canvas._h;
-      drawGrid();
-    }
-
-    // --- Event wiring ---
-    canvas.addEventListener('mousedown', (evt) => {
-      isMouseDown = true;
-
-      // Middle click OR Space-held OR Shift+Left => pan
-      if (evt.button === 1 || isSpaceHeld || (evt.button === 0 && evt.shiftKey)) {
-        startPan(evt.clientX, evt.clientY, isSpaceHeld);
-        return;
-      }
-
-      if (evt.button === 0) paintAtPoint(evt.clientX, evt.clientY);
-    });
-
-    window.addEventListener('mousemove', (evt) => {
-      if (isPanning) {
-        const dx = evt.clientX - startPanMouseX;
-        const dy = evt.clientY - startPanMouseY;
-        cameraX = startPanCameraX - (dx / currentZoom);
-        cameraY = startPanCameraY - (dy / currentZoom);
-        drawGrid();
-        return;
-      }
-
-      // drag paint
-      if (isMouseDown && (evt.buttons & 1) && !isSpaceHeld) {
-        paintAtPoint(evt.clientX, evt.clientY);
-      }
-    });
-
-    window.addEventListener('mouseup', (evt) => {
-      isMouseDown = false;
-      if (evt.button === 0 || evt.button === 1 || evt.button === 2) stopPan();
-      flushQueuedSave();
-    });
-
-    window.addEventListener('keydown', (evt) => {
-      if (evt.code === 'Space') {
-        evt.preventDefault();
-        if (!isSpaceHeld) {
-          isSpaceHeld = true;
-          setSpaceViewZoom(true);
-        }
-      }
-    });
-
-    window.addEventListener('keyup', (evt) => {
-      if (evt.code === 'Space') {
-        evt.preventDefault();
-        isSpaceHeld = false;
-        if (panBySpace) stopPan();
-        setSpaceViewZoom(false);
-      }
-    });
-
-    // Wheel cycles color schemes
-    canvas.addEventListener('wheel', (evt) => {
-      evt.preventDefault();
-      const direction = (evt.deltaY || evt.deltaX) >= 0 ? 1 : -1;
-      cycleScheme(direction);
-    }, { passive: false });
-
-    canvas.addEventListener('contextmenu', (evt) => {
-      evt.preventDefault();
-      if (!isPanning) eraseAtPoint(evt.clientX, evt.clientY);
-    });
-
-    window.addEventListener('blur', () => {
-      isMouseDown = false;
-      isSpaceHeld = false;
-      stopPan();
-      setSpaceViewZoom(false);
-      flushQueuedSave();
-    });
-
-    window.addEventListener('beforeunload', flushQueuedSave);
-    window.addEventListener('resize', () => {
-      // simpler + correct: ignore DPR tricks unless you need ultra-crisp lines
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      drawGrid();
-    });
-
-    // --- Init ---
-    loadStateFromQueryOrStorage();
-    updateShareUrl();
-
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    drawGrid();
-  </script>
+        window.onload = init;
+    </script>
 </body>
 </html>
