@@ -27,20 +27,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build static site bundle
-        run: |
-          mkdir -p dist
-          cp index.html dist/index.html
-          cp preview.png dist/preview.png
-          touch dist/.nojekyll
-
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload Pages artifact
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: .
 
       - name: Deploy to GitHub Pages
         id: deployment

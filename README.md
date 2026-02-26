@@ -1,6 +1,6 @@
 # EightPaint
 
-[![EightPaint Screenshot](./preview.png)](../../actions/workflows/deploy-pages.yml)
+[![EightPaint Screenshot](./preview.png)](https://luckymonkey.github.io/eightpaint/)
 
 EightPaint is a tiny hex-grid painting toy written in plain HTML and JavaScript.
 
@@ -18,10 +18,8 @@ Just a canvas and some hex math.
 
 1. Push this repo to GitHub.
 2. In your repository, open **Settings → Pages** and set **Source = GitHub Actions**.
-3. Trigger the workflow with a push (or run it manually from **Actions**).
-4. After the deploy workflow runs, click the screenshot (it links to the deploy workflow so you can open the latest Pages URL).
-5. If it still does not appear, ensure your default branch is `main`, `master`, or `work` (the workflow deploys from those).
-6. Check **Actions → Deploy static site to GitHub Pages** for a green run, then open the deployed URL shown in the job summary.
+3. Update the screenshot link above from `YOUR_GITHUB_USERNAME` to your real username/org.
+4. After the deploy workflow runs, click the screenshot to open and play the live app.
 
 ---
 
