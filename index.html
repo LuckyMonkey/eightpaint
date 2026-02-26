@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
   <title>Hexagonal Pixel Drawing Demo</title>
   <style>
     html, body {
@@ -16,7 +16,7 @@
       width: 100%;
       height: 100%;
       background: #111;
-      cursor: pointer;
+      cursor: crosshair;
     }
     canvas.panning {
       cursor: grabbing;
@@ -25,14 +25,19 @@
 </head>
 <body>
   <canvas id="hexCanvas"></canvas>
-  <script>
-    const canvas = document.getElementById('hexCanvas');
-    const ctx = canvas.getContext('2d');
 
+  <script>
+    'use strict';
+
+    const canvas = document.getElementById('hexCanvas');
+    const ctx = canvas.getContext('2d', { alpha: false });
+
+    // --- Grid geometry ---
     const hexSize = 16;
     const horiz = Math.sqrt(3) * hexSize;
     const vert = 1.5 * hexSize;
 
+    // --- Persistence / sharing ---
     const defaultColor = '#222';
     const storageKey = 'eightpaint-painted-cells-v1';
     const saveDelayMs = 1000;
@@ -40,18 +45,19 @@
 
     const colorSchemes = {
       swamp: ['#4f772d', '#31572c', '#90a955', '#7f4f24', '#a7c957', '#588157', '#3a5a40', '#606c38'],
-      lava: ['#ffba08', '#faa307', '#f48c06', '#e85d04', '#dc2f02', '#d00000', '#9d0208', '#ff7b00'],
-      ice: ['#caf0f8', '#ade8f4', '#90e0ef', '#48cae4', '#00b4d8', '#0096c7', '#0077b6', '#023e8a'],
+      lava:  ['#ffba08', '#faa307', '#f48c06', '#e85d04', '#dc2f02', '#d00000', '#9d0208', '#ff7b00'],
+      ice:   ['#caf0f8', '#ade8f4', '#90e0ef', '#48cae4', '#00b4d8', '#0096c7', '#0077b6', '#023e8a'],
     };
     const schemeOrder = ['swamp', 'lava', 'ice'];
-
     let activeSchemeIndex = 0;
     let paletteIndex = 0;
 
+    // --- Camera / interaction state ---
     let cameraX = 0;
     let cameraY = 0;
 
     const paintedCells = new Map();
+
     let isMouseDown = false;
     let isPanning = false;
     let panBySpace = false;
@@ -81,6 +87,20 @@
       return colorSchemes[schemeOrder[activeSchemeIndex]];
     }
 
+    function cellKey(row, col) {
+      return `${row},${col}`;
+    }
+
+    function getCellColor(row, col) {
+      return paintedCells.get(cellKey(row, col)) || defaultColor;
+    }
+
+    function setCellColor(row, col, color) {
+      const key = cellKey(row, col);
+      if (color === defaultColor) paintedCells.delete(key);
+      else paintedCells.set(key, color);
+    }
+
     function isSpacePanViewActive() {
       return isSpaceHeld || panBySpace;
     }
@@ -101,20 +121,6 @@
       currentZoom += delta * 0.18;
       drawGrid();
       zoomAnimationId = requestAnimationFrame(animateZoom);
-    }
-
-    function cellKey(row, col) {
-      return `${row},${col}`;
-    }
-
-    function getCellColor(row, col) {
-      return paintedCells.get(cellKey(row, col)) || defaultColor;
-    }
-
-    function setCellColor(row, col, color) {
-      const key = cellKey(row, col);
-      if (color === defaultColor) paintedCells.delete(key);
-      else paintedCells.set(key, color);
     }
 
     function encodeStateToBase64(state) {
@@ -144,16 +150,16 @@
         const url = new URL(window.location.href);
         url.searchParams.set(stateQueryKey, encoded);
         window.history.replaceState(null, '', url.toString());
-      } catch (err) {
-        // Ignore URL/state serialization failures.
+      } catch {
+        // ignore
       }
     }
 
     function savePaintedCellsNow() {
       try {
         localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(paintedCells)));
-      } catch (err) {
-        // Ignore storage quota/private mode errors.
+      } catch {
+        // ignore
       }
       updateShareUrl();
     }
@@ -175,14 +181,15 @@
     }
 
     function loadStateFromQueryOrStorage() {
-      const params = new URLSearchParams(window.location.search);
-      const encodedState = params.get(stateQueryKey);
-
-      if (encodedState) {
-        try {
+      // 1) Try query param
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const encodedState = params.get(stateQueryKey);
+        if (encodedState) {
           const state = decodeStateFromBase64(encodedState);
           paintedCells.clear();
-          if (state && typeof state.p === 'object') {
+
+          if (state && typeof state.p === 'object' && state.p) {
             for (const [key, color] of Object.entries(state.p)) {
               if (typeof color === 'string' && color !== defaultColor) paintedCells.set(key, color);
             }
@@ -196,11 +203,12 @@
             if (idx >= 0) activeSchemeIndex = idx;
           }
           return;
-        } catch (err) {
-          // fall back to localStorage if query state is invalid
         }
+      } catch {
+        // fall through
       }
 
+      // 2) Try localStorage
       try {
         const raw = localStorage.getItem(storageKey);
         if (!raw) return;
@@ -208,8 +216,8 @@
         for (const [key, color] of Object.entries(parsed)) {
           if (typeof color === 'string' && color !== defaultColor) paintedCells.set(key, color);
         }
-      } catch (err) {
-        // Ignore malformed/blocked storage and continue.
+      } catch {
+        // ignore
       }
     }
 
@@ -244,6 +252,7 @@
 
       const worldWidth = canvas.width / currentZoom;
       const worldHeight = canvas.height / currentZoom;
+
       const worldMinX = cameraX - worldWidth / 2 - hexSize;
       const worldMaxX = cameraX + worldWidth / 2 + hexSize;
       const worldMinY = cameraY - worldHeight / 2 - hexSize;
@@ -260,8 +269,10 @@
         for (let col = minCol; col <= maxCol; col++) {
           const worldX = hexCenterX(row, col);
           const worldY = row * vert;
+
           const screenX = (worldX - cameraX) * currentZoom + canvas.width / 2;
           const screenY = (worldY - cameraY) * currentZoom + canvas.height / 2;
+
           const fillColor = spaceMode ? '#000' : getCellColor(row, col);
           drawHex(screenX, screenY, fillColor, strokeColor);
         }
@@ -320,6 +331,7 @@
       const { row, col } = screenToCell(mouseX, mouseY);
 
       setCellColor(row, col, defaultColor);
+
       const neighbors = (row & 1) ? oddRowNeighbors : evenRowNeighbors;
       for (const [dx, dy] of neighbors) {
         setCellColor(row + dy, col + dx, defaultColor);
@@ -347,14 +359,51 @@
     }
 
     function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      canvas.width = Math.floor(window.innerWidth * dpr);
+      canvas.height = Math.floor(window.innerHeight * dpr);
+      canvas.style.width = '100%';
+      canvas.style.height = '100%';
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // After setting transform, canvas.width/height are in device px but drawing is in CSS px due to transform.
+      // So drawGrid uses canvas.width/height (device px) incorrectly unless we convert.
+      // Easiest: keep draw in CSS pixels by storing logical size:
+      // We'll compute logical sizes from innerWidth/innerHeight:
+      canvas._w = window.innerWidth;
+      canvas._h = window.innerHeight;
+      drawGridLogical();
+    }
+
+    function drawGridLogical() {
+      // Temporarily swap logical sizes for drawGrid without rewriting everything.
+      const realW = canvas.width, realH = canvas.height;
+      canvas.width = canvas._w;
+      canvas.height = canvas._h;
+      drawGrid();
+      canvas.width = realW;
+      canvas.height = realH;
+      // Restore transform (width change resets it)
+      const dpr = Math.max(1, window.devicePixelRatio || 1);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // Redraw once more in logical coordinates
+      canvas.width = canvas._w;
+      canvas.height = canvas._h;
+      drawGrid();
+      // Re-apply device pixel sizing
+      canvas.width = Math.floor(canvas._w * dpr);
+      canvas.height = Math.floor(canvas._h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // And draw final
+      canvas.width = canvas._w;
+      canvas.height = canvas._h;
       drawGrid();
     }
 
+    // --- Event wiring ---
     canvas.addEventListener('mousedown', (evt) => {
       isMouseDown = true;
 
+      // Middle click OR Space-held OR Shift+Left => pan
       if (evt.button === 1 || isSpaceHeld || (evt.button === 0 && evt.shiftKey)) {
         startPan(evt.clientX, evt.clientY, isSpaceHeld);
         return;
@@ -373,7 +422,10 @@
         return;
       }
 
-      if (isMouseDown && evt.buttons === 1 && !isSpaceHeld) paintAtPoint(evt.clientX, evt.clientY);
+      // drag paint
+      if (isMouseDown && (evt.buttons & 1) && !isSpaceHeld) {
+        paintAtPoint(evt.clientX, evt.clientY);
+      }
     });
 
     window.addEventListener('mouseup', (evt) => {
@@ -385,8 +437,10 @@
     window.addEventListener('keydown', (evt) => {
       if (evt.code === 'Space') {
         evt.preventDefault();
-        isSpaceHeld = true;
-        setSpaceViewZoom(true);
+        if (!isSpaceHeld) {
+          isSpaceHeld = true;
+          setSpaceViewZoom(true);
+        }
       }
     });
 
@@ -399,7 +453,7 @@
       }
     });
 
-    // Mouse wheel cycles color schemes (swamp/lava/ice).
+    // Wheel cycles color schemes
     canvas.addEventListener('wheel', (evt) => {
       evt.preventDefault();
       const direction = (evt.deltaY || evt.deltaX) >= 0 ? 1 : -1;
@@ -420,11 +474,20 @@
     });
 
     window.addEventListener('beforeunload', flushQueuedSave);
-    window.addEventListener('resize', resizeCanvas);
+    window.addEventListener('resize', () => {
+      // simpler + correct: ignore DPR tricks unless you need ultra-crisp lines
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      drawGrid();
+    });
 
+    // --- Init ---
     loadStateFromQueryOrStorage();
     updateShareUrl();
-    resizeCanvas();
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    drawGrid();
   </script>
 </body>
 </html>
