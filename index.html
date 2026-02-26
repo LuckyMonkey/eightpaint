@@ -4,7 +4,6 @@
   <meta charset="UTF-8">
   <title>Hexagonal Pixel Drawing Demo</title>
   <style>
-    /* Remove margins and scrollbars so the hex canvas fills the page */
     html, body {
       margin: 0;
       padding: 0;
@@ -17,85 +16,102 @@
       width: 100%;
       height: 100%;
       background: #111;
+      cursor: crosshair;
+    }
+    canvas.panning {
+      cursor: grabbing;
     }
   </style>
 </head>
 <body>
-  <!--
-    This demo draws a repeating grid of pointy‑topped hexagons across the entire
-    page. When you click a hexagon the clicked cell and its six immediate
-    neighbours are recoloured with the same random hue. The layout follows
-    the odd‑r offset coordinate system described by Red Blob Games. In this
-    system each row of hexagons is shifted horizontally by half a hex when
-    the row index is odd. The horizontal and vertical spacing of the centres
-    comes from the formulas for a pointy‑topped grid (horiz = √3 × size,
-    vert = 3/2 × size)【730040088138928†L71-L77】. Neighbour relationships
-    depend on the row parity; the offsets for even and odd rows are taken
-    from the table on Red Blob Games【730040088138928†L458-L470】.
-  -->
   <canvas id="hexCanvas"></canvas>
   <script>
-    // Get the canvas and its drawing context
     const canvas = document.getElementById('hexCanvas');
     const ctx = canvas.getContext('2d');
 
-    // Size of each hexagon measured from centre to any corner
-    const hexSize = 25;
-    // Precompute spacing constants using pointy‑topped formulas: horizontal
-    // spacing (distance between adjacent centres) and vertical spacing
-    const horiz = Math.sqrt(3) * hexSize;   // width of each column【730040088138928†L71-L77】
-    const vert  = 1.5 * hexSize;            // vertical distance between rows【730040088138928†L71-L77】
+    const hexSize = 20;
+    const horiz = Math.sqrt(3) * hexSize;
+    const vert = 1.5 * hexSize;
 
-    // The grid will be stored in a dictionary keyed by "row,col" strings.
-    // Each entry stores its row, col, centre coordinates (x,y) and a colour.
-    let grid;
+    // Camera offset in world-space. screen = world - camera.
+    let cameraX = 0;
+    let cameraY = 0;
 
-    /**
-     * Build the grid of hexagons covering the visible canvas.  We use the
-     * odd‑r offset coordinate system, which offsets every odd row by half a
-     * hex width. We iterate over a rectangle of potential rows/columns that
-     * completely covers the viewport and create hex cells wherever the centre
-     * falls within the viewport plus a margin.
-     */
-    function buildGrid() {
-      grid = {};
-      // Determine roughly how many rows and columns we need to cover the
-      // current canvas size. We add a couple of extra rows/columns around
-      // the edges so that partially visible hexes are drawn properly.
-      const rowCount = Math.ceil(canvas.height / vert) + 2;
-      const colCount = Math.ceil(canvas.width  / horiz) + 2;
-      for (let row = -1; row < rowCount; row++) {
-        for (let col = -1; col < colCount; col++) {
-          // In odd‑r offset coordinates, odd rows are shifted right by half
-          // a hex width. Compute the centre x coordinate accordingly.
-          const x = col * horiz + ((row & 1) ? horiz / 2 : 0);
-          const y = row * vert;
-          // Only store cells whose centre lies just outside the viewport
-          if (x > -hexSize && x < canvas.width + hexSize &&
-              y > -hexSize && y < canvas.height + hexSize) {
-            const key = `${row},${col}`;
-            grid[key] = { row, col, x, y, color: '#222' };
-          }
-        }
+    const defaultColor = '#222';
+    const storageKey = 'eightpaint-painted-cells-v1';
+
+    // Persist only painted cells so drawings survive resize/panning.
+    const paintedCells = new Map();
+    let lastPaintColor = 'hsl(190, 70%, 50%)';
+
+    const evenRowNeighbors = [
+      [+1,  0], [ 0, -1], [-1, -1],
+      [-1,  0], [-1, +1], [ 0, +1],
+    ];
+    const oddRowNeighbors = [
+      [+1,  0], [+1, -1], [ 0, -1],
+      [-1,  0], [ 0, +1], [+1, +1],
+    ];
+
+    let isPanning = false;
+    let startPanMouseX = 0;
+    let startPanMouseY = 0;
+    let startPanCameraX = 0;
+    let startPanCameraY = 0;
+
+    function cellKey(row, col) {
+      return `${row},${col}`;
+    }
+
+    function getCellColor(row, col) {
+      return paintedCells.get(cellKey(row, col)) || defaultColor;
+    }
+
+    function setCellColor(row, col, color) {
+      const key = cellKey(row, col);
+      if (color === defaultColor) {
+        paintedCells.delete(key);
+      } else {
+        paintedCells.set(key, color);
       }
     }
 
-    /**
-     * Draw a single pointy‑topped hexagon at the given centre coordinates.
-     * Colours and outlines are drawn to distinguish cells.
-     */
+    function savePaintedCells() {
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(Object.fromEntries(paintedCells)));
+      } catch (err) {
+        // Ignore storage failures (e.g. private mode quota issues).
+      }
+    }
+
+    function loadPaintedCells() {
+      try {
+        const raw = localStorage.getItem(storageKey);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        for (const [key, color] of Object.entries(parsed)) {
+          if (typeof color === 'string' && color !== defaultColor) {
+            paintedCells.set(key, color);
+            lastPaintColor = color;
+          }
+        }
+      } catch (err) {
+        // Ignore malformed/blocked localStorage and continue with blank canvas.
+      }
+    }
+
+    function hexCenterX(row, col) {
+      return col * horiz + ((row & 1) ? horiz / 2 : 0);
+    }
+
     function drawHex(x, y, color) {
       ctx.beginPath();
       for (let i = 0; i < 6; i++) {
-        // Angle offset of 30° gives pointy tops【730040088138928†L89-L94】
         const angle = (Math.PI / 180) * (60 * i + 30);
         const vx = x + hexSize * Math.cos(angle);
         const vy = y + hexSize * Math.sin(angle);
-        if (i === 0) {
-          ctx.moveTo(vx, vy);
-        } else {
-          ctx.lineTo(vx, vy);
-        }
+        if (i === 0) ctx.moveTo(vx, vy);
+        else ctx.lineTo(vx, vy);
       }
       ctx.closePath();
       ctx.fillStyle = color;
@@ -105,75 +121,128 @@
       ctx.stroke();
     }
 
-    /**
-     * Render the entire grid. Clear the canvas and draw each stored cell.
-     */
     function drawGrid() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const key in grid) {
-        const cell = grid[key];
-        drawHex(cell.x, cell.y, cell.color);
+
+      const worldMinY = cameraY - hexSize;
+      const worldMaxY = cameraY + canvas.height + hexSize;
+      const minRow = Math.floor(worldMinY / vert) - 1;
+      const maxRow = Math.ceil(worldMaxY / vert) + 1;
+
+      for (let row = minRow; row <= maxRow; row++) {
+        const shift = (row & 1) ? horiz / 2 : 0;
+        const worldMinX = cameraX - hexSize;
+        const worldMaxX = cameraX + canvas.width + hexSize;
+        const minCol = Math.floor((worldMinX - shift) / horiz) - 1;
+        const maxCol = Math.ceil((worldMaxX - shift) / horiz) + 1;
+
+        for (let col = minCol; col <= maxCol; col++) {
+          const worldX = hexCenterX(row, col);
+          const worldY = row * vert;
+          const screenX = worldX - cameraX;
+          const screenY = worldY - cameraY;
+          drawHex(screenX, screenY, getCellColor(row, col));
+        }
       }
     }
 
-    // Neighbour offset tables for even and odd rows using the odd‑r layout.
-    // These come directly from the Red Blob Games article【730040088138928†L458-L470】.
-    const evenRowNeighbors = [
-      [+1,  0], [ 0, -1], [-1, -1],
-      [-1,  0], [-1, +1], [ 0, +1],
-    ];
-    const oddRowNeighbors  = [
-      [+1,  0], [+1, -1], [ 0, -1],
-      [-1,  0], [ 0, +1], [+1, +1],
-    ];
+    function screenToCell(mouseX, mouseY) {
+      const worldX = mouseX + cameraX;
+      const worldY = mouseY + cameraY;
+      const row = Math.floor(worldY / vert);
+      const shift = (row & 1) ? horiz / 2 : 0;
+      const col = Math.floor((worldX - shift) / horiz);
+      return { row, col };
+    }
 
-    /**
-     * Handle a click event: determine which hexagon was clicked and recolour
-     * it along with its neighbours. We invert the odd‑r coordinate formulas:
-     * row = floor(mouseY / vert), col = floor((mouseX - shift) / horiz).
-     */
-    function handleClick(evt) {
+    function paintAtMouse(evt) {
       const rect = canvas.getBoundingClientRect();
       const mouseX = evt.clientX - rect.left;
       const mouseY = evt.clientY - rect.top;
-      // Determine which row the click falls into
-      const row = Math.floor(mouseY / vert);
-      // Determine the horizontal shift for odd rows
-      const parity = row & 1;
-      const col = Math.floor((mouseX - (parity ? horiz / 2 : 0)) / horiz);
-      const key = `${row},${col}`;
-      if (grid[key]) {
-        // Pick a random pastel colour to apply to the clicked cell and its neighbours
-        const hue = Math.floor(Math.random() * 360);
-        const color = `hsl(${hue}, 70%, 50%)`;
-        grid[key].color = color;
-        // Choose neighbour offsets based on row parity
-        const neighborOffsets = (parity ? oddRowNeighbors : evenRowNeighbors);
-        for (const [dx, dy] of neighborOffsets) {
-          const nRow = row + dy;
-          const nCol = col + dx;
-          const nKey = `${nRow},${nCol}`;
-          if (grid[nKey]) {
-            grid[nKey].color = color;
-          }
-        }
-        drawGrid();
-      }
-    }
+      const { row, col } = screenToCell(mouseX, mouseY);
 
-    // Resize the canvas when the window size changes and rebuild the grid.
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      buildGrid();
+      const color = lastPaintColor;
+      setCellColor(row, col, color);
+
+      const neighbors = (row & 1) ? oddRowNeighbors : evenRowNeighbors;
+      for (const [dx, dy] of neighbors) {
+        setCellColor(row + dy, col + dx, color);
+      }
+
+      savePaintedCells();
       drawGrid();
     }
 
-    // Listen for clicks and window resizes
-    canvas.addEventListener('click', handleClick);
-    window.addEventListener('resize', resizeCanvas);
+    function eraseAtMouse(evt) {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = evt.clientX - rect.left;
+      const mouseY = evt.clientY - rect.top;
+      const { row, col } = screenToCell(mouseX, mouseY);
 
-    // Initialise the canvas when the page loads
+      // Erasing should not change the active paint color.
+      setCellColor(row, col, defaultColor);
+
+      const neighbors = (row & 1) ? oddRowNeighbors : evenRowNeighbors;
+      for (const [dx, dy] of neighbors) {
+        setCellColor(row + dy, col + dx, defaultColor);
+      }
+
+      savePaintedCells();
+      drawGrid();
+    }
+
+    function resizeCanvas() {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      drawGrid();
+    }
+
+    canvas.addEventListener('click', (evt) => {
+      if (!isPanning && evt.button === 0) {
+        paintAtMouse(evt);
+      }
+    });
+
+    canvas.addEventListener('mousedown', (evt) => {
+      // Pan with middle-click or Shift + left-click drag.
+      if (evt.button === 1 || (evt.button === 0 && evt.shiftKey)) {
+        isPanning = true;
+        startPanMouseX = evt.clientX;
+        startPanMouseY = evt.clientY;
+        startPanCameraX = cameraX;
+        startPanCameraY = cameraY;
+        canvas.classList.add('panning');
+      }
+    });
+
+    window.addEventListener('mousemove', (evt) => {
+      if (!isPanning) return;
+      const dx = evt.clientX - startPanMouseX;
+      const dy = evt.clientY - startPanMouseY;
+      cameraX = startPanCameraX - dx;
+      cameraY = startPanCameraY - dy;
+      drawGrid();
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!isPanning) return;
+      isPanning = false;
+      canvas.classList.remove('panning');
+    });
+
+    canvas.addEventListener('contextmenu', (evt) => {
+      evt.preventDefault();
+      if (!isPanning) {
+        eraseAtMouse(evt);
+      }
+    });
+
+    window.addEventListener('resize', resizeCanvas);
+    loadPaintedCells();
+    if (paintedCells.size === 0) {
+      const initialHue = Math.floor(Math.random() * 360);
+      lastPaintColor = `hsl(${initialHue}, 70%, 50%)`;
+    }
     resizeCanvas();
   </script>
 </body>
