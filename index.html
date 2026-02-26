@@ -43,12 +43,77 @@
     const saveDelayMs = 1000;
     const stateQueryKey = 'state';
 
-    const colorSchemes = {
-      swamp: ['#4f772d', '#31572c', '#90a955', '#7f4f24', '#a7c957', '#588157', '#3a5a40', '#606c38'],
-      lava:  ['#ffba08', '#faa307', '#f48c06', '#e85d04', '#dc2f02', '#d00000', '#9d0208', '#ff7b00'],
-      ice:   ['#caf0f8', '#ade8f4', '#90e0ef', '#48cae4', '#00b4d8', '#0096c7', '#0077b6', '#023e8a'],
-    };
-    const schemeOrder = ['swamp', 'lava', 'ice'];
+const colorSchemes = {
+
+  swamp: ['#4f772d', '#31572c', '#90a955', '#7f4f24', '#a7c957', '#588157', '#3a5a40', '#606c38'],
+
+  lava: ['#ffba08', '#faa307', '#f48c06', '#e85d04', '#dc2f02', '#d00000', '#9d0208', '#ff7b00'],
+
+  ice: ['#caf0f8', '#ade8f4', '#90e0ef', '#48cae4', '#00b4d8', '#0096c7', '#0077b6', '#023e8a'],
+
+  pastel: [
+    '#ffd6e0',
+    '#ffc6ff',
+    '#caffbf',
+    '#bde0fe',
+    '#a0c4ff',
+    '#ffadad',
+    '#fdffb6',
+    '#cdb4db'
+  ],
+
+  mono: [
+    '#000000',
+    '#ffffff'
+  ],
+
+  rainbow: [
+    '#ff0000',
+    '#ff7f00',
+    '#ffff00',
+    '#00ff00',
+    '#00ffff',
+    '#0000ff',
+    '#8b00ff',
+    '#ff1493'
+  ],
+
+  candy: [
+    '#ff3c8e',
+    '#ff8c42',
+    '#ffd23f',
+    '#2ec4b6',
+    '#6a4c93',
+    '#ff99c8',
+    '#caffbf',
+    '#9bf6ff'
+  ],
+
+  forest: [
+    '#1b4332',
+    '#2d6a4f',
+    '#40916c',
+    '#52b788',
+    '#74c69d',
+    '#95d5b2',
+    '#b7e4c7',
+    '#081c15'
+  ],
+
+  ocean: [
+    '#03045e',
+    '#023e8a',
+    '#0077b6',
+    '#0096c7',
+    '#00b4d8',
+    '#48cae4',
+    '#90e0ef',
+    '#caf0f8'
+  ]
+
+};
+
+const schemeOrder = ['swamp', 'lava', 'ice', 'pastel', 'mono', 'rainbow', 'candy', 'forest', 'ocean'];
     let activeSchemeIndex = 0;
     let paletteIndex = 0;
 
