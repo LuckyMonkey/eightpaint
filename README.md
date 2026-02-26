@@ -1,6 +1,6 @@
 # EightPaint
 
-![EightPaint Screenshot](./preview.png)
+[![EightPaint Screenshot](./preview.png)](https://YOUR_GITHUB_USERNAME.github.io/eightpaint/)
 
 EightPaint is a tiny hex-grid painting toy written in plain HTML and JavaScript.
 
@@ -11,6 +11,15 @@ No framework.
 No build system.  
 No dependencies.  
 Just a canvas and some hex math.
+
+---
+
+## Live preview (GitHub Pages)
+
+1. Push this repo to GitHub.
+2. In your repository, open **Settings → Pages** and set **Source = GitHub Actions**.
+3. Update the screenshot link above from `YOUR_GITHUB_USERNAME` to your real username/org.
+4. After the deploy workflow runs, click the screenshot to open and play the live app.
 
 ---
 
@@ -29,13 +38,13 @@ Just a canvas and some hex math.
 |------|------|
 | 🖱 **Middle Click + Drag** | Pan the grid |
 | ⌨ **Shift + Drag** | Pan the grid |
-| ⌨ **Hold Space** | Temporary zoom-out view |
+| ⌨ **Hold Space** | Zoomed-out black/white overview + grab hand cursor |
 
 ### 🌈 Palettes
 
 | Action | Result |
 |------|------|
-| 🖱 **Mouse Wheel** | Cycle color palettes |
+| 🖱 **Mouse Wheel** | Cycle color palettes + blink palette label at cursor |
 
 Includes palettes like:
 
@@ -47,17 +56,22 @@ Includes palettes like:
 
 - 🧩 Infinite hex grid
 - 🎨 Neighbor-based hex painting
+- ⚫⚪ Spacebar zoomed-out monochrome preview
+- ✨ Cursor-following palette indicator with blink/fade behavior
+- 🖐 Hand/grab cursor during space-view and panning
+- 🚀 Faster, smoother panning interpolation
 - 💾 Local persistence
 - 🔗 Shareable drawings via encoded URL state
 - 🖥 Responsive canvas resizing
+- 🌍 GitHub Pages deploy workflow
 
 ---
 
-## Run
-
-Clone the repo and open the HTML file.
+## Run locally
 
 ```bash
 git clone https://github.com/yourusername/eightpaint
 cd eightpaint
-open index.html
+python3 -m http.server 4173
+# open http://localhost:4173
+```
